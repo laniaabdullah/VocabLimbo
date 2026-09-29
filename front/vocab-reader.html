@@ -143,10 +143,11 @@
   .deck-row .name { font-size: 15px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .deck-row .count { font-size: 12px; color: var(--ink-faint); margin-top: 2px; }
   .deck-row.active .name { color: var(--kaki-bright); }
-  .deck-row .del {
+  .deck-row .edit, .deck-row .del {
     width: 28px; height: 28px; border-radius: 50%; border: none; background: var(--bg-3); color: var(--ink-faint);
-    font-size: 15px; cursor: pointer; flex-shrink: 0; display:flex; align-items:center; justify-content:center;
+    font-size: 14px; cursor: pointer; flex-shrink: 0; display:flex; align-items:center; justify-content:center;
   }
+  .deck-row .edit:hover { color: var(--indigo); }
   .deck-row .del:hover { color: var(--kaki-bright); }
   .deck-empty { color: var(--ink-faint); font-size: 13px; padding: 20px 4px; text-align: center; line-height: 1.7; }
 
@@ -350,6 +351,7 @@
 
   var decks = {};        // { deckName: [{word,reading,meaning}, ...] }
   var activeDeck = null;
+  var editingDeck = null;
   var savedPos = 0;
   var wakeLock = null;
   var resumeInterval = null;
@@ -504,10 +506,15 @@
       row.className = 'deck-row' + (name === activeDeck ? ' active' : '');
       row.innerHTML =
         '<div class="info"><div class="name">' + escapeHtml(name) + '</div><div class="count">' + decks[name].length + ' Vokabeln</div></div>' +
+        '<button class="edit" type="button" aria-label="Deck bearbeiten">✎</button>' +
         '<button class="del" type="button" aria-label="Deck löschen">✕</button>';
       row.querySelector('.info').addEventListener('click', function(){
         loadDeck(name);
         closeDrawer();
+      });
+      row.querySelector('.edit').addEventListener('click', function(e){
+        e.stopPropagation();
+        startEditDeck(name);
       });
       row.querySelector('.del').addEventListener('click', function(e){
         e.stopPropagation();
@@ -681,7 +688,10 @@
     document.querySelectorAll('.panel').forEach(function(p){ p.classList.toggle('active', p.id === 'panel-' + tab); });
   }
   document.querySelectorAll('.tab-btn').forEach(function(b){
-    b.addEventListener('click', function(){ switchTab(b.dataset.tab); });
+    b.addEventListener('click', function(){
+      if (b.dataset.tab === 'decks' && editingDeck !== null) resetAddForm();
+      switchTab(b.dataset.tab);
+    });
   });
 
   document.getElementById('openDrawer').addEventListener('click', function(){ openDrawer('decks'); });
@@ -751,16 +761,39 @@
   vocabInput.addEventListener('input', updatePreview);
   deckNameInput.addEventListener('input', updatePreview);
 
+  function resetAddForm(){
+    editingDeck = null;
+    deckNameInput.value = '';
+    vocabInput.value = '';
+    saveDeckBtn.textContent = 'Als Deck speichern';
+    updatePreview();
+  }
+
+  function startEditDeck(name){
+    if (!decks[name]) return;
+    editingDeck = name;
+    deckNameInput.value = name;
+    vocabInput.value = decks[name].map(function(entry){
+      return [entry.word, entry.reading, entry.meaning].filter(function(v){ return v; }).join('\t');
+    }).join('\n');
+    saveDeckBtn.textContent = 'Deck aktualisieren';
+    updatePreview();
+    switchTab('add');
+  }
+
   saveDeckBtn.addEventListener('click', function(){
     var parsed = parseList(vocabInput.value);
     var name = deckNameInput.value.trim();
     if (!parsed.length || !name) return;
+    if (editingDeck && editingDeck !== name) delete decks[editingDeck];
     decks[name] = parsed;
     activeDeck = name;
+    editingDeck = null;
     saveState();
     loadDeck(name);
     vocabInput.value = '';
     deckNameInput.value = '';
+    saveDeckBtn.textContent = 'Als Deck speichern';
     updatePreview();
     switchTab('decks');
   });
