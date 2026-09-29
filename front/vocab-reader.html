@@ -1,0 +1,828 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>読み上げ — Vokabel-Vorleser</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Shippori+Mincho:wght@400;500;600;800&family=Zen+Maru+Gothic:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #161A24;
+    --bg-2: #1E2433;
+    --bg-3: #262E42;
+    --ink: #EFEAE0;
+    --ink-dim: #9BA1B8;
+    --ink-faint: #666E8A;
+    --indigo: #6E93BD;
+    --indigo-dim: #48587A;
+    --kaki: #C15A2E;
+    --kaki-bright: #E07340;
+    --line: rgba(239,234,224,0.10);
+    --line-strong: rgba(239,234,224,0.20);
+    --ok: #6FA980;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  * { box-sizing: border-box; }
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'Zen Maru Gothic', system-ui, -apple-system, 'Segoe UI', sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  body { display: flex; flex-direction: column; min-height: 100%; overflow-x: hidden; }
+
+  body::before {
+    content: "";
+    position: fixed;
+    inset: 0;
+    background:
+      radial-gradient(ellipse 60% 40% at 20% 0%, rgba(110,147,189,0.10), transparent 60%),
+      radial-gradient(ellipse 50% 35% at 100% 100%, rgba(193,90,46,0.08), transparent 60%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  header {
+    position: relative; z-index: 1;
+    padding: 20px clamp(16px, 5vw, 40px) 8px;
+    display: flex; align-items: baseline; justify-content: space-between; gap: 12px;
+  }
+  header .brand { font-family: 'Shippori Mincho', serif; font-size: 20px; font-weight: 600; letter-spacing: 0.02em; }
+  header .brand span { color: var(--ink-faint); font-size: 13px; margin-left: 8px; font-family: 'Zen Maru Gothic', sans-serif; }
+  header .actions { display: flex; gap: 8px; }
+  header button.ghost {
+    background: none; border: 1px solid var(--line-strong); color: var(--ink-dim);
+    border-radius: 999px; padding: 7px 16px; font-size: 13px; font-family: inherit; cursor: pointer;
+    transition: border-color .15s, color .15s;
+  }
+  header button.ghost:hover { border-color: var(--indigo); color: var(--ink); }
+  header button.ghost:focus-visible { outline: 2px solid var(--indigo); outline-offset: 2px; }
+
+  main {
+    position: relative; z-index: 1; flex: 1;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 20px clamp(16px, 6vw, 40px) 12px; text-align: center; min-height: 0;
+  }
+
+  .deck-label {
+    font-size: 12px; color: var(--indigo); letter-spacing: 0.06em; margin-bottom: 6px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .counter { font-size: 13px; color: var(--ink-faint); letter-spacing: 0.08em; margin-bottom: 18px; font-variant-numeric: tabular-nums; }
+
+  .stage { display: flex; flex-direction: column; align-items: center; gap: 14px; min-height: 220px; justify-content: center; width: 100%; }
+  .reading { font-size: clamp(16px, 3.4vw, 20px); color: var(--indigo); letter-spacing: 0.04em; min-height: 1.4em; }
+  .word {
+    font-family: 'Shippori Mincho', serif; font-weight: 600; font-size: clamp(46px, 13vw, 92px);
+    line-height: 1.15; word-break: keep-all; overflow-wrap: anywhere; max-width: 100%;
+  }
+  .meaning { font-size: clamp(15px, 3vw, 18px); color: var(--ink-dim); min-height: 1.4em; transition: opacity .15s; }
+  .meaning.hidden { opacity: 0; }
+
+  .empty-state { color: var(--ink-faint); font-size: 15px; line-height: 1.7; max-width: 340px; }
+  .empty-state button { margin-top: 18px; }
+
+  .transport { position: relative; z-index: 1; display: flex; align-items: center; justify-content: center; gap: 22px; padding: 10px 20px 6px; }
+  .transport button { background: none; border: none; color: var(--ink); cursor: pointer; padding: 8px; display: flex; align-items: center; justify-content: center; }
+  .transport button:focus-visible { outline: 2px solid var(--indigo); outline-offset: 3px; border-radius: 50%; }
+  .transport button:disabled { opacity: 0.3; cursor: default; }
+  .transport svg { width: 24px; height: 24px; }
+  .transport .step svg { width: 22px; height: 22px; color: var(--ink-dim); }
+  .transport .step:hover svg { color: var(--ink); }
+
+  .play-btn { width: 68px; height: 68px; border-radius: 50%; background: var(--kaki); box-shadow: 0 8px 24px rgba(193,90,46,0.35); transition: transform .12s, background .15s; }
+  .play-btn:hover { background: var(--kaki-bright); }
+  .play-btn:active { transform: scale(0.94); }
+  .play-btn svg { width: 26px; height: 26px; color: #17140f; margin-left: 2px; }
+  .play-btn.playing svg { margin-left: 0; }
+
+  .progress-wrap { position: relative; z-index: 1; padding: 0 clamp(16px, 6vw, 40px) 18px; }
+  .progress-track { height: 3px; border-radius: 3px; background: var(--line-strong); overflow: hidden; }
+  .progress-fill { height: 100%; background: var(--indigo); width: 0%; transition: width .2s linear; }
+
+  footer.status { position: relative; z-index: 1; text-align: center; font-size: 12px; color: var(--ink-faint); padding: 0 20px 14px; min-height: 1.6em; }
+
+  .scrim { position: fixed; inset: 0; background: rgba(10,12,18,0.55); backdrop-filter: blur(2px); opacity: 0; pointer-events: none; transition: opacity .2s; z-index: 5; }
+  .scrim.open { opacity: 1; pointer-events: auto; }
+
+  .drawer {
+    position: fixed; left: 0; right: 0; bottom: 0; max-height: 90vh;
+    background: var(--bg-2); border-top: 1px solid var(--line); border-radius: 20px 20px 0 0;
+    transform: translateY(100%); transition: transform .25s cubic-bezier(.32,.72,0,1);
+    z-index: 6; padding: 18px clamp(16px, 5vw, 40px) calc(20px + env(safe-area-inset-bottom, 0px));
+    overflow-y: auto; box-shadow: 0 -10px 40px rgba(0,0,0,0.4);
+  }
+  .drawer.open { transform: translateY(0); }
+  .drawer-handle { width: 36px; height: 4px; border-radius: 4px; background: var(--line-strong); margin: 0 auto 16px; }
+  .drawer h2 { font-family: 'Shippori Mincho', serif; font-size: 18px; font-weight: 600; margin: 0 0 14px; }
+
+  .tabs { display: flex; gap: 6px; margin-bottom: 16px; background: var(--bg); border-radius: 10px; padding: 4px; }
+  .tabs button {
+    flex: 1; background: none; border: none; color: var(--ink-faint); font-family: inherit; font-size: 13px;
+    padding: 9px 6px; border-radius: 8px; cursor: pointer; transition: background .15s, color .15s;
+  }
+  .tabs button.active { background: var(--bg-3); color: var(--ink); }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  /* deck list */
+  .deck-row {
+    display: flex; align-items: center; gap: 10px; padding: 12px 4px; border-bottom: 1px solid var(--line);
+    cursor: pointer;
+  }
+  .deck-row:hover { background: rgba(255,255,255,0.02); }
+  .deck-row .info { flex: 1; min-width: 0; }
+  .deck-row .name { font-size: 15px; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .deck-row .count { font-size: 12px; color: var(--ink-faint); margin-top: 2px; }
+  .deck-row.active .name { color: var(--kaki-bright); }
+  .deck-row .del {
+    width: 28px; height: 28px; border-radius: 50%; border: none; background: var(--bg-3); color: var(--ink-faint);
+    font-size: 15px; cursor: pointer; flex-shrink: 0; display:flex; align-items:center; justify-content:center;
+  }
+  .deck-row .del:hover { color: var(--kaki-bright); }
+  .deck-empty { color: var(--ink-faint); font-size: 13px; padding: 20px 4px; text-align: center; line-height: 1.7; }
+
+  p.hint { color: var(--ink-faint); font-size: 13px; margin: 0 0 14px; line-height: 1.6; }
+  label.field-label { font-size: 12px; color: var(--ink-faint); letter-spacing: 0.03em; display: block; margin-bottom: 6px; }
+
+  input[type=text] {
+    width: 100%; background: var(--bg); border: 1px solid var(--line-strong); border-radius: 10px;
+    color: var(--ink); font-family: inherit; font-size: 15px; padding: 11px 12px; margin-bottom: 14px;
+  }
+  input[type=text]:focus-visible, textarea:focus-visible, select:focus-visible { outline: 2px solid var(--indigo); outline-offset: 1px; }
+
+  textarea {
+    width: 100%; min-height: 130px; background: var(--bg); border: 1px solid var(--line-strong); border-radius: 12px;
+    color: var(--ink); font-family: 'Zen Maru Gothic', sans-serif; font-size: 15px; padding: 14px; resize: vertical; line-height: 1.6;
+  }
+
+  .parse-preview { font-size: 12px; color: var(--ink-faint); margin-top: 8px; min-height: 1.6em; }
+  .parse-preview.ok { color: var(--ok); }
+  .parse-preview.warn { color: var(--kaki-bright); }
+
+  .file-drop {
+    border: 1.5px dashed var(--line-strong); border-radius: 12px; padding: 20px 14px; text-align: center;
+    color: var(--ink-faint); font-size: 13px; margin-bottom: 16px; cursor: pointer; transition: border-color .15s, color .15s;
+  }
+  .file-drop:hover { border-color: var(--indigo); color: var(--ink-dim); }
+  .file-drop strong { color: var(--ink); display: block; margin-bottom: 4px; font-size: 14px; }
+  .file-drop input[type=file] { display: none; }
+
+  .divider-text { text-align: center; color: var(--ink-faint); font-size: 12px; margin: 4px 0 16px; }
+
+  .settings-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 16px; margin: 4px 0 8px; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  .field label { font-size: 12px; color: var(--ink-faint); letter-spacing: 0.03em; display: flex; justify-content: space-between; }
+  .field label .val { color: var(--indigo); font-variant-numeric: tabular-nums; }
+  input[type=range] { -webkit-appearance: none; width: 100%; height: 3px; background: var(--line-strong); border-radius: 3px; }
+  input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--indigo); cursor: pointer; margin-top: -6.5px; }
+  input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border-radius: 50%; background: var(--indigo); border: none; cursor: pointer; }
+
+  .toggle-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 2px; border-top: 1px solid var(--line); font-size: 14px; }
+  .toggle-row:last-of-type { border-bottom: 1px solid var(--line); }
+  .switch { position: relative; width: 42px; height: 24px; background: var(--bg-3); border: 1px solid var(--line-strong); border-radius: 999px; cursor: pointer; flex-shrink: 0; }
+  .switch .knob { position: absolute; top: 2px; left: 2px; width: 18px; height: 18px; border-radius: 50%; background: var(--ink-faint); transition: transform .15s, background .15s; }
+  .switch.on { background: var(--indigo-dim); border-color: var(--indigo); }
+  .switch.on .knob { transform: translateX(18px); background: var(--ink); }
+
+  select { width: 100%; background: var(--bg); border: 1px solid var(--line-strong); border-radius: 10px; color: var(--ink); font-family: inherit; font-size: 14px; padding: 10px 12px; }
+
+  .drawer-actions { display: flex; gap: 10px; margin-top: 18px; }
+  .btn { flex: 1; padding: 13px; border-radius: 12px; border: none; font-family: inherit; font-size: 14px; font-weight: 500; cursor: pointer; }
+  .btn-primary { background: var(--kaki); color: #17140f; }
+  .btn-primary:hover { background: var(--kaki-bright); }
+  .btn-primary:disabled { opacity: 0.4; cursor: default; }
+  .btn-secondary { background: var(--bg-3); color: var(--ink-dim); }
+  .btn-secondary:hover { color: var(--ink); }
+
+  .voice-warning {
+    font-size: 12px; color: var(--kaki-bright); background: rgba(193,90,46,0.12); border: 1px solid rgba(193,90,46,0.3);
+    border-radius: 10px; padding: 10px 12px; margin-bottom: 14px; line-height: 1.6; display: none;
+  }
+  .voice-warning.show { display: block; }
+
+  @media (max-width: 420px) { .settings-grid { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">読み上げ<span>Vokabel-Vorleser</span></div>
+  <div class="actions">
+    <button class="ghost" id="openDrawer" type="button">Decks</button>
+  </div>
+</header>
+
+<main id="main">
+  <div class="deck-label" id="deckLabel"></div>
+  <div class="counter" id="counter"></div>
+  <div class="stage" id="stage">
+    <div class="empty-state">
+      Noch keine Vokabeln geladen.<br>Leg dir ein Deck an — aus einer Textdatei (z. B. deinem Anki-Export) oder durch Einfügen einer Liste.
+      <br>
+      <button class="btn btn-primary" id="emptyAdd" type="button" style="margin-top:18px;">Deck anlegen</button>
+    </div>
+  </div>
+</main>
+
+<div class="transport" id="transport" style="display:none;">
+  <button class="step" id="prevBtn" type="button" aria-label="Vorherige Vokabel">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zm3.5 7 10-7v14z" transform="scale(-1,1) translate(-24,0)"/></svg>
+  </button>
+  <button class="play-btn" id="playBtn" type="button" aria-label="Abspielen">
+    <svg id="playIcon" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+  </button>
+  <button class="step" id="nextBtn" type="button" aria-label="Nächste Vokabel">
+    <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 5h2v14H6zm3.5 7 10-7v14z"/></svg>
+  </button>
+</div>
+
+<div class="progress-wrap" id="progressWrap" style="display:none;">
+  <div class="progress-track"><div class="progress-fill" id="progressFill"></div></div>
+</div>
+
+<footer class="status" id="statusLine"></footer>
+
+<div class="scrim" id="scrim"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-handle"></div>
+  <h2>Deine Decks</h2>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="decks" type="button">Meine Decks</button>
+    <button class="tab-btn" data-tab="add" type="button">Neu hinzufügen</button>
+    <button class="tab-btn" data-tab="settings" type="button">Einstellungen</button>
+  </div>
+
+  <!-- DECKS PANEL -->
+  <div class="panel active" id="panel-decks">
+    <div id="deckList"></div>
+  </div>
+
+  <!-- ADD PANEL -->
+  <div class="panel" id="panel-add">
+    <label class="file-drop" for="fileInput">
+      <strong>Datei(en) auswählen</strong>
+      Anki-Export (.txt / .csv) — eine Datei wird ein Deck, mehrere Dateien werden mehrere Decks
+      <input type="file" id="fileInput" accept=".txt,.csv,text/plain,text/csv" multiple>
+    </label>
+
+    <div class="divider-text">— oder Liste einfügen —</div>
+
+    <label class="field-label" for="deckNameInput">Deck-Name</label>
+    <input type="text" id="deckNameInput" placeholder="z. B. Kapitel 3">
+
+    <label class="field-label" for="vocabInput">Vokabeln (eine pro Zeile)</label>
+    <p class="hint">Wort, Lesung und Bedeutung werden automatisch erkannt — egal ob dein Text mit Tabs (Anki-Export), Bindestrichen oder Kommas getrennt ist. Zeilen mit „#" am Anfang werden ignoriert.</p>
+    <textarea id="vocabInput" placeholder="犬	いぬ	Hund&#10;食べる	たべる	essen&#10;図書館	としょかん	Bibliothek"></textarea>
+    <div class="parse-preview" id="parsePreview"></div>
+
+    <div class="drawer-actions">
+      <button class="btn btn-primary" id="saveDeckBtn" type="button" disabled>Als Deck speichern</button>
+    </div>
+  </div>
+
+  <!-- SETTINGS PANEL -->
+  <div class="panel" id="panel-settings">
+    <div class="voice-warning" id="voiceWarning">Dein Browser hat noch keine japanische Sprachstimme gefunden. Manche Browser laden Stimmen erst nach, sobald einmal abgespielt wurde — probier's trotzdem aus.</div>
+
+    <div class="toggle-row">
+      <span>Bedeutung anzeigen</span>
+      <div class="switch on" id="toggleMeaning"><div class="knob"></div></div>
+    </div>
+    <div class="toggle-row">
+      <span>Lesung (Hiragana) anzeigen</span>
+      <div class="switch on" id="toggleReading"><div class="knob"></div></div>
+    </div>
+    <div class="toggle-row">
+      <span>Zufällige Reihenfolge</span>
+      <div class="switch" id="toggleShuffle"><div class="knob"></div></div>
+    </div>
+    <div class="toggle-row">
+      <span>Endlosschleife</span>
+      <div class="switch on" id="toggleLoop"><div class="knob"></div></div>
+    </div>
+
+    <div class="settings-grid">
+      <div class="field">
+        <label>Geschwindigkeit <span class="val" id="rateVal">0.9×</span></label>
+        <input type="range" id="rateInput" min="0.5" max="1.5" step="0.1" value="0.9">
+      </div>
+      <div class="field">
+        <label>Pause zwischen Wörtern <span class="val" id="pauseVal">1.5s</span></label>
+        <input type="range" id="pauseInput" min="0" max="5" step="0.5" value="1.5">
+      </div>
+      <div class="field">
+        <label>Wiederholungen pro Wort <span class="val" id="repeatVal">2×</span></label>
+        <input type="range" id="repeatInput" min="1" max="5" step="1" value="2">
+      </div>
+      <div class="field">
+        <label>Stimme</label>
+        <select id="voiceSelect"><option>Lade Stimmen…</option></select>
+      </div>
+    </div>
+  </div>
+
+  <div class="drawer-actions">
+    <button class="btn btn-secondary" id="closeDrawer" type="button">Schließen</button>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  var words = [];
+  var order = [];
+  var pos = 0;
+  var playing = false;
+  var repeatsLeftForCurrent = 0;
+  var pendingTimer = null;
+  var voices = [];
+
+  var decks = {};        // { deckName: [{word,reading,meaning}, ...] }
+  var activeDeck = null;
+  var savedPos = 0;
+  var wakeLock = null;
+  var resumeInterval = null;
+
+  var settings = {
+    showMeaning: true, showReading: true, shuffle: false, loop: true,
+    rate: 0.9, pause: 1.5, repeats: 2, voiceURI: null
+  };
+
+  // ---------- persistence ----------
+  function loadState(){
+    try {
+      var raw = localStorage.getItem('vocab-reader-state-v2');
+      if (!raw) return;
+      var data = JSON.parse(raw);
+      if (data.decks) decks = data.decks;
+      if (data.activeDeck) activeDeck = data.activeDeck;
+      if (data.settings) Object.assign(settings, data.settings);
+      if (typeof data.pos === 'number') savedPos = data.pos;
+    } catch(e) { /* start fresh */ }
+  }
+  function saveState(){
+    try {
+      localStorage.setItem('vocab-reader-state-v2', JSON.stringify({
+        decks: decks, activeDeck: activeDeck, settings: settings, pos: pos
+      }));
+    } catch(e) { /* storage unavailable */ }
+  }
+
+  // ---------- parsing ----------
+  function stripHtml(s){
+    return s.replace(/<[^>]*>/g, '').replace(/&nbsp;/g, ' ').trim();
+  }
+
+  function parseList(text){
+    text = text.replace(/^\uFEFF/, ''); // strip BOM
+    var lines = text.split(/\r\n|\r|\n/).map(function(l){ return l; }).filter(function(l){
+      var t = l.trim();
+      return t.length > 0 && t.indexOf('#') !== 0; // skip blank + Anki header/comment lines
+    });
+    return lines.map(function(line){
+      var parts;
+      if (line.indexOf('\t') !== -1) {
+        parts = line.split('\t');
+      } else if (/[-–—,、]/.test(line)) {
+        parts = line.split(/\s*[-–—,、]\s*/);
+      } else {
+        parts = [line];
+      }
+      parts = parts.map(stripHtml).filter(function(p, i){ return i === 0 || p.length; });
+      return { word: parts[0] || '', reading: parts[1] || '', meaning: parts[2] || '' };
+    }).filter(function(v){ return v.word; });
+  }
+
+  function buildOrder(){
+    order = words.map(function(_, i){ return i; });
+    if (settings.shuffle) {
+      for (var i = order.length - 1; i > 0; i--) {
+        var j = Math.floor(Math.random() * (i + 1));
+        var tmp = order[i]; order[i] = order[j]; order[j] = tmp;
+      }
+    }
+  }
+
+  function loadDeck(name){
+    if (!decks[name]) return;
+    stop();
+    activeDeck = name;
+    words = decks[name];
+    pos = 0;
+    buildOrder();
+    render();
+    renderDeckList();
+    saveState();
+    statusLine.textContent = words.length + ' Vokabeln geladen aus „' + name + '".';
+  }
+
+  // ---------- voices ----------
+  function refreshVoices(){
+    voices = window.speechSynthesis ? window.speechSynthesis.getVoices() : [];
+    var jaVoices = voices.filter(function(v){ return v.lang && v.lang.toLowerCase().indexOf('ja') === 0; });
+    var select = document.getElementById('voiceSelect');
+    var warning = document.getElementById('voiceWarning');
+    select.innerHTML = '';
+    if (jaVoices.length === 0) {
+      warning.classList.add('show');
+      var opt = document.createElement('option');
+      opt.textContent = 'Keine JA-Stimme gefunden';
+      select.appendChild(opt);
+      return;
+    }
+    warning.classList.remove('show');
+    jaVoices.forEach(function(v){
+      var opt = document.createElement('option');
+      opt.value = v.voiceURI;
+      opt.textContent = v.name + (v.localService ? '' : ' (online)');
+      select.appendChild(opt);
+    });
+    if (settings.voiceURI && jaVoices.some(function(v){ return v.voiceURI === settings.voiceURI; })) {
+      select.value = settings.voiceURI;
+    } else {
+      settings.voiceURI = jaVoices[0].voiceURI;
+      select.value = settings.voiceURI;
+    }
+  }
+  if ('speechSynthesis' in window) window.speechSynthesis.onvoiceschanged = refreshVoices;
+
+  // ---------- rendering ----------
+  var stage = document.getElementById('stage');
+  var counter = document.getElementById('counter');
+  var deckLabel = document.getElementById('deckLabel');
+  var progressFill = document.getElementById('progressFill');
+  var statusLine = document.getElementById('statusLine');
+
+  function currentEntry(){ return order.length ? words[order[pos]] : null; }
+
+  function escapeHtml(s){ var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+
+  function render(){
+    deckLabel.textContent = activeDeck ? activeDeck : '';
+    var entry = currentEntry();
+    if (!entry) {
+      stage.innerHTML = '<div class="empty-state">Noch keine Vokabeln geladen.<br>Leg dir ein Deck an — aus einer Textdatei (z. B. deinem Anki-Export) oder durch Einfügen einer Liste.<br><button class="btn btn-primary" id="emptyAdd" type="button" style="margin-top:18px;">Deck anlegen</button></div>';
+      var eb = document.getElementById('emptyAdd');
+      if (eb) eb.addEventListener('click', function(){ openDrawer('decks'); });
+      counter.textContent = '';
+      document.getElementById('transport').style.display = 'none';
+      document.getElementById('progressWrap').style.display = 'none';
+      return;
+    }
+    document.getElementById('transport').style.display = 'flex';
+    document.getElementById('progressWrap').style.display = 'block';
+    counter.textContent = (pos + 1) + ' / ' + order.length;
+    updateMediaSession(entry);
+    stage.innerHTML =
+      '<div class="reading">' + (settings.showReading && entry.reading ? escapeHtml(entry.reading) : '') + '</div>' +
+      '<div class="word">' + escapeHtml(entry.word) + '</div>' +
+      '<div class="meaning' + (settings.showMeaning && entry.meaning ? '' : ' hidden') + '">' + (entry.meaning ? escapeHtml(entry.meaning) : '&nbsp;') + '</div>';
+    progressFill.style.width = (((pos + 1) / order.length) * 100) + '%';
+  }
+
+  function renderDeckList(){
+    var el = document.getElementById('deckList');
+    var names = Object.keys(decks);
+    if (!names.length) {
+      el.innerHTML = '<div class="deck-empty">Noch keine Decks gespeichert.<br>Wechsle oben zu „Neu hinzufügen".</div>';
+      return;
+    }
+    el.innerHTML = '';
+    names.forEach(function(name){
+      var row = document.createElement('div');
+      row.className = 'deck-row' + (name === activeDeck ? ' active' : '');
+      row.innerHTML =
+        '<div class="info"><div class="name">' + escapeHtml(name) + '</div><div class="count">' + decks[name].length + ' Vokabeln</div></div>' +
+        '<button class="del" type="button" aria-label="Deck löschen">✕</button>';
+      row.querySelector('.info').addEventListener('click', function(){
+        loadDeck(name);
+        closeDrawer();
+      });
+      row.querySelector('.del').addEventListener('click', function(e){
+        e.stopPropagation();
+        if (!confirm('Deck „' + name + '" wirklich löschen?')) return;
+        delete decks[name];
+        if (activeDeck === name) {
+          activeDeck = null; words = []; order = []; pos = 0;
+          render();
+        }
+        saveState();
+        renderDeckList();
+      });
+      el.appendChild(row);
+    });
+  }
+
+  function setPlayIcon(isPlaying){
+    var btn = document.getElementById('playBtn');
+    var icon = document.getElementById('playIcon');
+    btn.classList.toggle('playing', isPlaying);
+    btn.setAttribute('aria-label', isPlaying ? 'Pause' : 'Abspielen');
+    icon.innerHTML = isPlaying ? '<path d="M6 5h4v14H6zm8 0h4v14h-4z"/>' : '<path d="M8 5v14l11-7z"/>';
+  }
+
+  // ---------- playback ----------
+  function speak(text, onDone){
+    if (!('speechSynthesis' in window) || !text) { onDone(); return; }
+    window.speechSynthesis.cancel();
+    var utter = new SpeechSynthesisUtterance(text);
+    utter.lang = 'ja-JP';
+    utter.rate = settings.rate;
+    var chosen = voices.find(function(v){ return v.voiceURI === settings.voiceURI; });
+    if (chosen) utter.voice = chosen;
+    utter.onend = onDone;
+    utter.onerror = onDone;
+    window.speechSynthesis.speak(utter);
+  }
+
+  function clearPending(){ if (pendingTimer) { clearTimeout(pendingTimer); pendingTimer = null; } }
+
+  function playCurrent(){
+    if (!playing) return;
+    var entry = currentEntry();
+    if (!entry) { stop(); return; }
+    render();
+    statusLine.textContent = 'wird vorgelesen…';
+    speak(entry.word, function(){
+      if (!playing) return;
+      if (entry.reading && entry.reading !== entry.word) {
+        speak(entry.reading, function(){ afterUtterance(); });
+      } else {
+        afterUtterance();
+      }
+    });
+  }
+
+  function afterUtterance(){
+    if (!playing) return;
+    repeatsLeftForCurrent--;
+    statusLine.textContent = 'Pause…';
+    if (repeatsLeftForCurrent > 0) pendingTimer = setTimeout(playCurrent, settings.pause * 1000);
+    else pendingTimer = setTimeout(advance, settings.pause * 1000);
+  }
+
+  function advance(){
+    if (!playing) return;
+    pos++;
+    if (pos >= order.length) {
+      if (settings.loop) { if (settings.shuffle) buildOrder(); pos = 0; }
+      else { stop(); statusLine.textContent = 'Liste zu Ende.'; return; }
+    }
+    repeatsLeftForCurrent = settings.repeats;
+    saveState();
+    playCurrent();
+  }
+
+  function play(){
+    if (!order.length) { openDrawer('decks'); return; }
+    if (playing) return;
+    playing = true; setPlayIcon(true);
+    repeatsLeftForCurrent = settings.repeats;
+    requestWakeLock();
+    startResumeWorkaround();
+    setMediaPlaybackState('playing');
+    playCurrent();
+  }
+  function pause(){
+    playing = false; clearPending();
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    setPlayIcon(false);
+    statusLine.textContent = 'pausiert';
+    releaseWakeLock();
+    stopResumeWorkaround();
+    setMediaPlaybackState('paused');
+  }
+  function stop(){
+    playing = false; clearPending();
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+    setPlayIcon(false);
+    releaseWakeLock();
+    stopResumeWorkaround();
+    setMediaPlaybackState('none');
+  }
+
+  // ---------- keep playing on mobile: wake lock + media session ----------
+  function requestWakeLock(){
+    if (!('wakeLock' in navigator)) return;
+    navigator.wakeLock.request('screen').then(function(lock){
+      wakeLock = lock;
+    }).catch(function(){ /* e.g. low battery mode — ignore */ });
+  }
+  function releaseWakeLock(){
+    if (wakeLock) { wakeLock.release().catch(function(){}); wakeLock = null; }
+  }
+  document.addEventListener('visibilitychange', function(){
+    if (playing && document.visibilityState === 'visible' && !wakeLock) requestWakeLock();
+  });
+
+  function startResumeWorkaround(){
+    if (resumeInterval) return;
+    resumeInterval = setInterval(function(){
+      if ('speechSynthesis' in window && window.speechSynthesis.speaking) {
+        window.speechSynthesis.pause();
+        window.speechSynthesis.resume();
+      }
+    }, 10000);
+  }
+  function stopResumeWorkaround(){
+    if (resumeInterval) { clearInterval(resumeInterval); resumeInterval = null; }
+  }
+
+  function setMediaPlaybackState(state){
+    if ('mediaSession' in navigator) navigator.mediaSession.playbackState = state;
+  }
+  function updateMediaSession(entry){
+    if (!('mediaSession' in navigator)) return;
+    navigator.mediaSession.metadata = new MediaMetadata({
+      title: entry ? entry.word : '読み上げ',
+      artist: activeDeck || 'Vokabel-Vorleser',
+      album: entry && entry.meaning ? entry.meaning : ''
+    });
+  }
+  if ('mediaSession' in navigator) {
+    navigator.mediaSession.setActionHandler('play', play);
+    navigator.mediaSession.setActionHandler('pause', pause);
+    navigator.mediaSession.setActionHandler('previoustrack', function(){ goTo(-1); });
+    navigator.mediaSession.setActionHandler('nexttrack', function(){ goTo(1); });
+  }
+  function goTo(delta){
+    stop();
+    if (!order.length) return;
+    pos = (pos + delta + order.length) % order.length;
+    render();
+    saveState();
+  }
+
+  // ---------- drawer ----------
+  var drawer = document.getElementById('drawer');
+  var scrim = document.getElementById('scrim');
+  function openDrawer(tab){
+    drawer.classList.add('open');
+    scrim.classList.add('open');
+    refreshVoices();
+    renderDeckList();
+    if (tab) switchTab(tab);
+  }
+  function closeDrawer(){ drawer.classList.remove('open'); scrim.classList.remove('open'); }
+
+  function switchTab(tab){
+    document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.toggle('active', b.dataset.tab === tab); });
+    document.querySelectorAll('.panel').forEach(function(p){ p.classList.toggle('active', p.id === 'panel-' + tab); });
+  }
+  document.querySelectorAll('.tab-btn').forEach(function(b){
+    b.addEventListener('click', function(){ switchTab(b.dataset.tab); });
+  });
+
+  document.getElementById('openDrawer').addEventListener('click', function(){ openDrawer('decks'); });
+  document.getElementById('closeDrawer').addEventListener('click', closeDrawer);
+  document.getElementById('scrim').addEventListener('click', closeDrawer);
+
+  document.getElementById('playBtn').addEventListener('click', function(){ if (playing) pause(); else play(); });
+  document.getElementById('prevBtn').addEventListener('click', function(){ goTo(-1); });
+  document.getElementById('nextBtn').addEventListener('click', function(){ goTo(1); });
+
+  function bindToggle(id, key){
+    var el = document.getElementById(id);
+    el.addEventListener('click', function(){
+      settings[key] = !settings[key];
+      el.classList.toggle('on', settings[key]);
+      if (key === 'shuffle') buildOrder();
+      render();
+      saveState();
+    });
+  }
+  bindToggle('toggleMeaning', 'showMeaning');
+  bindToggle('toggleReading', 'showReading');
+  bindToggle('toggleShuffle', 'shuffle');
+  bindToggle('toggleLoop', 'loop');
+
+  document.getElementById('rateInput').addEventListener('input', function(e){
+    settings.rate = parseFloat(e.target.value);
+    document.getElementById('rateVal').textContent = settings.rate.toFixed(1) + '×';
+    saveState();
+  });
+  document.getElementById('pauseInput').addEventListener('input', function(e){
+    settings.pause = parseFloat(e.target.value);
+    document.getElementById('pauseVal').textContent = settings.pause + 's';
+    saveState();
+  });
+  document.getElementById('repeatInput').addEventListener('input', function(e){
+    settings.repeats = parseInt(e.target.value, 10);
+    document.getElementById('repeatVal').textContent = settings.repeats + '×';
+    saveState();
+  });
+  document.getElementById('voiceSelect').addEventListener('change', function(e){
+    settings.voiceURI = e.target.value;
+    saveState();
+  });
+
+  // ---------- add panel: paste ----------
+  var vocabInput = document.getElementById('vocabInput');
+  var deckNameInput = document.getElementById('deckNameInput');
+  var parsePreview = document.getElementById('parsePreview');
+  var saveDeckBtn = document.getElementById('saveDeckBtn');
+
+  function updatePreview(){
+    var parsed = parseList(vocabInput.value);
+    if (!vocabInput.value.trim()) {
+      parsePreview.textContent = '';
+      parsePreview.className = 'parse-preview';
+    } else if (parsed.length === 0) {
+      parsePreview.textContent = 'Konnte keine Vokabeln erkennen — bitte Format prüfen.';
+      parsePreview.className = 'parse-preview warn';
+    } else {
+      parsePreview.textContent = parsed.length + ' Vokabeln erkannt. Beispiel: ' + parsed[0].word + (parsed[0].reading ? ' (' + parsed[0].reading + ')' : '') + (parsed[0].meaning ? ' – ' + parsed[0].meaning : '');
+      parsePreview.className = 'parse-preview ok';
+    }
+    saveDeckBtn.disabled = !(parsed.length && deckNameInput.value.trim());
+    return parsed;
+  }
+  vocabInput.addEventListener('input', updatePreview);
+  deckNameInput.addEventListener('input', updatePreview);
+
+  saveDeckBtn.addEventListener('click', function(){
+    var parsed = parseList(vocabInput.value);
+    var name = deckNameInput.value.trim();
+    if (!parsed.length || !name) return;
+    decks[name] = parsed;
+    activeDeck = name;
+    saveState();
+    loadDeck(name);
+    vocabInput.value = '';
+    deckNameInput.value = '';
+    updatePreview();
+    switchTab('decks');
+  });
+
+  // ---------- add panel: file upload ----------
+  document.getElementById('fileInput').addEventListener('change', function(e){
+    var files = Array.prototype.slice.call(e.target.files || []);
+    if (!files.length) return;
+    var loaded = 0;
+    files.forEach(function(file){
+      var reader = new FileReader();
+      reader.onload = function(){
+        var text = String(reader.result || '');
+        var parsed = parseList(text);
+        var baseName = file.name.replace(/\.[^.]+$/, '');
+        var name = baseName;
+        var n = 2;
+        while (decks[name]) { name = baseName + ' (' + n + ')'; n++; }
+        if (parsed.length) {
+          decks[name] = parsed;
+          activeDeck = name;
+        }
+        loaded++;
+        if (loaded === files.length) {
+          saveState();
+          renderDeckList();
+          if (activeDeck) loadDeck(activeDeck);
+          switchTab('decks');
+          statusLine.textContent = files.length + ' Datei(en) importiert.';
+        }
+      };
+      reader.readAsText(file, 'UTF-8');
+    });
+    e.target.value = '';
+  });
+
+  // ---------- init ----------
+  document.getElementById('emptyAdd').addEventListener('click', function(){ openDrawer('decks'); });
+
+  loadState();
+  document.getElementById('rateInput').value = settings.rate;
+  document.getElementById('pauseInput').value = settings.pause;
+  document.getElementById('repeatInput').value = settings.repeats;
+  document.getElementById('rateVal').textContent = settings.rate.toFixed(1) + '×';
+  document.getElementById('pauseVal').textContent = settings.pause + 's';
+  document.getElementById('repeatVal').textContent = settings.repeats + '×';
+  document.getElementById('toggleMeaning').classList.toggle('on', settings.showMeaning);
+  document.getElementById('toggleReading').classList.toggle('on', settings.showReading);
+  document.getElementById('toggleShuffle').classList.toggle('on', settings.shuffle);
+  document.getElementById('toggleLoop').classList.toggle('on', settings.loop);
+
+  if (activeDeck && decks[activeDeck]) {
+    words = decks[activeDeck];
+    buildOrder();
+    if (savedPos >= 0 && savedPos < order.length) pos = savedPos;
+  }
+  render();
+  renderDeckList();
+  refreshVoices();
+
+  if (!('speechSynthesis' in window)) statusLine.textContent = 'Dein Browser unterstützt leider keine Sprachausgabe.';
+})();
+</script>
+</body>
+</html>
